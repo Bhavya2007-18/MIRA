@@ -1,3 +1,12 @@
-"""Adaptive difficulty engine."""
+"""Adaptive difficulty engine for MIRA cognitive games."""
 
-__all__: list[str] = []
+from mira_ml.adaptive.engine import AdaptiveDifficultyEngine, DifficultyState
+from mira_ml.adaptive.rules import AdaptiveConfig, DEFAULT_ADAPTIVE_CONFIG, clamp_difficulty
+
+__all__ = [
+    "AdaptiveDifficultyEngine",
+    "DifficultyState",
+    "AdaptiveConfig",
+    "DEFAULT_ADAPTIVE_CONFIG",
+    "clamp_difficulty",
+]
