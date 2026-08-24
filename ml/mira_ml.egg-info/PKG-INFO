@@ -4,6 +4,8 @@ Version: 0.1.0
 Summary: MIRA AI/ML Engine — Cognitive scoring, profiling, personalization, and memory prosthetic
 Requires-Python: >=3.10
 Requires-Dist: pydantic<3.0,>=2.0
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: uvicorn[standard]>=0.23.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"

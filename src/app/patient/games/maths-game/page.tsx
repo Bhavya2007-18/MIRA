@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, RotateCcw, Trophy, Zap } from 'lucide-react';
+import { postEventBatch } from '../../../../lib/miraAiBridge';
 
 function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -59,6 +60,20 @@ export default function MathsGamePage() {
     setTimeout(() => {
       if (roundNum >= totalRounds) {
         setIsGameOver(true);
+        // Send game telemetry to AI backend
+        const totalCorrect = Math.floor(score / 10);
+        postEventBatch([{
+          patient_id: 'MIRA-8821',
+          session_id: `maths-${Date.now()}`,
+          game_id: 'MATHS_COMPARE',
+          task_type: 'reasoning',
+          difficulty,
+          correct: totalCorrect > totalRounds / 2,
+          response_time_ms: 2000,
+          attempts: totalRounds,
+          hints_used: 0,
+          skipped: false,
+        }]);
       } else {
         nextRound();
       }

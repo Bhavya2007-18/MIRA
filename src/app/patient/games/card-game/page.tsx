@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { RotateCcw, ArrowLeft, Trophy, Sparkles } from 'lucide-react';
+import { postEventBatch } from '../../../../lib/miraAiBridge';
 
 interface CardItem {
   uid: number;
@@ -95,6 +96,20 @@ export default function CardGamePage() {
             if (next.every((c) => c.isMatched)) {
               setIsCompleted(true);
               if (timerRef.current) clearInterval(timerRef.current);
+              // Send game telemetry to AI backend
+              const totalMoves = movesCount + 1;
+              postEventBatch([{
+                patient_id: 'MIRA-8821',
+                session_id: `card-${Date.now()}`,
+                game_id: 'CARD_MATCH',
+                task_type: 'memory',
+                difficulty: 5,
+                correct: true,
+                response_time_ms: 2000,
+                attempts: totalMoves,
+                hints_used: 0,
+                skipped: false,
+              }]);
             }
             return next;
           });

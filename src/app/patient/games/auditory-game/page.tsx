@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, RotateCcw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { postEventBatch } from '../../../../lib/miraAiBridge';
 
 interface SoundRound {
   soundLabel: string;
@@ -153,6 +154,20 @@ export default function AuditoryGamePage() {
     setTimeout(() => {
       if (roundNum >= totalRounds) {
         setIsGameOver(true);
+        // Send game telemetry to AI backend
+        const totalCorrect = Math.floor(score / 15);
+        postEventBatch([{
+          patient_id: 'MIRA-8821',
+          session_id: `auditory-${Date.now()}`,
+          game_id: 'AUDITORY_RECALL',
+          task_type: 'attention',
+          difficulty: 5,
+          correct: totalCorrect > totalRounds / 2,
+          response_time_ms: 3000,
+          attempts: totalRounds,
+          hints_used: 0,
+          skipped: false,
+        }]);
       } else {
         setRound(generateRound());
         setRoundNum((r) => r + 1);
