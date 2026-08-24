@@ -196,3 +196,31 @@ class AdaptiveDifficultyEngine:
             reason="; ".join(reason_parts),
             confidence=confidence,
         )
+
+    def compute(
+        self,
+        events: list[GameEvent],
+        current_difficulty: int,
+        game_id: str,
+        target_domain: str,
+        patient_id: str,
+    ) -> DifficultyRecommendation:
+        """Compute difficulty recommendation from events.
+        
+        Args:
+            events: List of GameEvents.
+            current_difficulty: Current difficulty level (1-10).
+            game_id: Identifier of the game being played.
+            target_domain: Cognitive domain being targeted.
+            patient_id: Patient identifier.
+            
+        Returns:
+            DifficultyRecommendation with suggested difficulty and rationale.
+        """
+        return self.evaluate_session(
+            patient_id=patient_id,
+            game_id=game_id,
+            target_domain=target_domain,
+            current_difficulty=current_difficulty,
+            events=events,
+        )
