@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: mira-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt && pip install -e ./ml
+    startCommand: uvicorn mira_ml.api.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
