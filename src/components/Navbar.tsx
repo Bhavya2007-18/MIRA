@@ -17,13 +17,13 @@ export const Navbar: React.FC = () => {
   const t = getWebTranslation(selectedLanguage);
 
   const navLinks = [
-    { href: '/dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { href: '/dashboard/upload', label: t.uploadPerson, icon: UserPlus },
+    { href: '/caretaker/dashboard', label: t.dashboard, icon: LayoutDashboard },
+    { href: '/caretaker/dashboard/upload', label: t.uploadPerson, icon: UserPlus },
   ];
 
   const handleLogout = () => {
     logout();
-    router.push('/login');
+    router.push('/');
   };
 
   const patientsList = [
@@ -41,7 +41,7 @@ export const Navbar: React.FC = () => {
           
           {/* Left Brand & Patient Switcher */}
           <div className="flex items-center space-x-6">
-            <Link href="/dashboard" className="flex items-center space-x-3 group">
+            <Link href="/caretaker/dashboard" className="flex items-center space-x-3 group">
               <div className="w-10 h-10 rounded-2xl bg-sage-500 flex items-center justify-center shadow-md shadow-sage-700/20 group-hover:scale-105 transition-transform">
                 <Sparkles className="w-5 h-5 text-white" />
               </div>

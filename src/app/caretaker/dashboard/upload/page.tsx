@@ -14,9 +14,9 @@ import {
   X,
   MapPin
 } from 'lucide-react';
-import { useAuth } from '../../../context/AuthContext';
-import { EnrolledFamilyMember } from '../../../types';
-import { getWebTranslation } from '../../../lib/translations';
+import { useAuth } from '../../../../context/AuthContext';
+import { EnrolledFamilyMember } from '../../../../types';
+import { getWebTranslation } from '../../../../lib/translations';
 
 const NER_AVATAR_PRESETS = [
   'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=400&auto=format&fit=crop', // Priya

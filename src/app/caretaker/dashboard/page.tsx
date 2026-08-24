@@ -10,21 +10,21 @@ import {
   Clock,
   MapPin,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { StatCard } from '../../components/StatCard';
-import { ReactionTrendChart } from '../../components/ReactionTrendChart';
-import { GameAccuracyChart } from '../../components/GameAccuracyChart';
-import { ActivityFeed } from '../../components/ActivityFeed';
-import { AiInsightsBanner } from '../../components/AiInsightsBanner';
-import { CognitiveDomainCard } from '../../components/CognitiveDomainCard';
+import { useAuth } from '../../../context/AuthContext';
+import { StatCard } from '../../../components/StatCard';
+import { ReactionTrendChart } from '../../../components/ReactionTrendChart';
+import { GameAccuracyChart } from '../../../components/GameAccuracyChart';
+import { ActivityFeed } from '../../../components/ActivityFeed';
+import { AiInsightsBanner } from '../../../components/AiInsightsBanner';
+import { CognitiveDomainCard } from '../../../components/CognitiveDomainCard';
 import {
   REACTION_TIME_14_DAYS,
   GAME_ACCURACY_BREAKDOWN,
   RECENT_ACTIVITY_FEED,
-} from '../../lib/mockData';
-import { getWebTranslation } from '../../lib/translations';
-import { fetchPatientProfile, fetchPatientAnalytics } from '../../lib/miraAiBridge';
-import { CognitiveProfile, CaregiverReport } from '../../types/ai';
+} from '../../../lib/mockData';
+import { getWebTranslation } from '../../../lib/translations';
+import { fetchPatientProfile, fetchPatientAnalytics } from '../../../lib/miraAiBridge';
+import { CognitiveProfile, CaregiverReport } from '../../../types/ai';
 
 export default function DashboardPage() {
   const { patient, selectedLanguage } = useAuth();

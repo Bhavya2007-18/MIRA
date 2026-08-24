@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ShieldCheck, HeartHandshake, BrainCircuit, Users, ArrowRight, Globe } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { WEB_SUPPORTED_LANGUAGES, getWebTranslation } from '../../lib/translations';
+import { useAuth } from '../../../context/AuthContext';
+import { WEB_SUPPORTED_LANGUAGES, getWebTranslation } from '../../../lib/translations';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function LoginPage() {
 
     try {
       await loginWithGoogle(patientCode.trim());
-      router.push('/dashboard');
+      router.push('/caretaker/dashboard');
     } catch (err) {
       setErrorMsg('Failed to authenticate with Google.');
     }

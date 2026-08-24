@@ -2,8 +2,8 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../../context/AuthContext';
-import { Navbar } from '../../components/Navbar';
+import { useAuth } from '../../../context/AuthContext';
+import { Navbar } from '../../../components/Navbar';
 
 export default function DashboardLayout({
   children,
@@ -18,7 +18,7 @@ export default function DashboardLayout({
     if (!isLoading && !isAuthenticated) {
       const stored = localStorage.getItem('mira_caretaker_auth');
       if (!stored) {
-        router.push('/login');
+        router.push('/caretaker/login');
       }
     }
   }, [isAuthenticated, isLoading, router]);
