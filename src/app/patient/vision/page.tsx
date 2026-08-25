@@ -236,6 +236,7 @@ export default function VisionPage() {
           className={`w-full h-full object-cover transition-opacity duration-300 ${
             cameraActive ? 'opacity-100' : 'opacity-0 absolute inset-0'
           }`}
+          style={{ transform: 'scaleX(-1)' }}
         />
 
         {/* Fallback photo when camera is off */}
