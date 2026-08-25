@@ -36,7 +36,9 @@ const ENROLLED_PERSONS = [
 export default function VisionPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -44,9 +46,6 @@ export default function VisionPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const person = ENROLLED_PERSONS[selectedIndex];
-  const identifiedPerson = scanResult?.identity_id
-    ? ENROLLED_PERSONS.find(p => p.id === scanResult.identity_id)
-    : null;
 
   // Check model status on mount
   useEffect(() => {
@@ -56,25 +55,59 @@ export default function VisionPage() {
       .catch(() => {});
   }, []);
 
+  // Attach stream to video element whenever it changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && streamRef.current) {
+      video.srcObject = streamRef.current;
+      video.play().catch(() => {});
+    }
+  }, [cameraActive]);
+
   const startCamera = useCallback(async () => {
+    if (cameraLoading) return;
+    setCameraLoading(true);
+    setError('');
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
       });
+      streamRef.current = stream;
+
+      // Attach directly to video element if it exists
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        setCameraActive(true);
-        setError('');
+        await videoRef.current.play().catch(() => {});
       }
-    } catch {
-      setError('Camera access denied. Using demo mode.');
+
+      setCameraActive(true);
+      setError('');
+    } catch (err: any) {
+      console.error('Camera error:', err);
+      if (err?.name === 'NotAllowedError') {
+        setError('Camera permission denied. Please allow camera access in your browser settings.');
+      } else if (err?.name === 'NotFoundError') {
+        setError('No camera found. Please connect a webcam.');
+      } else if (err?.name === 'NotReadableError') {
+        setError('Camera is being used by another app. Close other camera apps and try again.');
+      } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        setError('Camera requires HTTPS. Please use https:// or localhost.');
+      } else {
+        setError(`Camera error: ${err?.message || 'Unknown'}`);
+      }
+    } finally {
+      setCameraLoading(false);
     }
-  }, []);
+  }, [cameraLoading]);
 
   const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(t => t.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setCameraActive(false);
@@ -83,17 +116,16 @@ export default function VisionPage() {
   const captureFrame = useCallback((): number[][][] | null => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !video.videoWidth) return null;
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Convert to H×W×3 array
     const frame: number[][][] = [];
     for (let y = 0; y < canvas.height; y++) {
       const row: number[][] = [];
@@ -108,17 +140,13 @@ export default function VisionPage() {
 
   const handleScan = useCallback(async () => {
     if (!cameraActive) {
-      // Demo mode — use the current person's photo
       setIsScanning(true);
       setScanResult(null);
       try {
         const res = await fetch(`${BACKEND_URL}/api/v1/vision/face/recognize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            patient_id: 'MIRA-8821',
-            image: [[], []], // Empty — will return no_face
-          }),
+          body: JSON.stringify({ patient_id: 'MIRA-8821', image: [[], []] }),
         });
         const data = await res.json();
         setScanResult({
@@ -140,10 +168,9 @@ export default function VisionPage() {
       return;
     }
 
-    // Real camera scan
     const frame = captureFrame();
     if (!frame) {
-      setError('Failed to capture frame');
+      setError('Failed to capture frame. Is the camera running?');
       return;
     }
 
@@ -190,9 +217,8 @@ export default function VisionPage() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(t => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
       }
     };
   }, []);
@@ -201,13 +227,24 @@ export default function VisionPage() {
     <div className="space-y-4">
       {/* Camera Viewport */}
       <div className="relative rounded-3xl overflow-hidden bg-charcoal-900 aspect-[3/4] sm:aspect-video">
-        {cameraActive ? (
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-        ) : (
+        {/* Video always mounted, hidden when camera off */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
+            cameraActive ? 'opacity-100' : 'opacity-0 absolute inset-0'
+          }`}
+        />
+
+        {/* Fallback photo when camera is off */}
+        {!cameraActive && (
           <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
         )}
+
         <canvas ref={canvasRef} className="hidden" />
-        <div className="absolute inset-0 bg-charcoal-900/20" />
+        <div className="absolute inset-0 bg-charcoal-900/20 pointer-events-none" />
 
         {/* Top Controls */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 z-10">
@@ -223,18 +260,19 @@ export default function VisionPage() {
           </div>
         </div>
 
-        {/* Bounding Box */}
+        {/* Scanning animation */}
         {isScanning && (
-          <div className="absolute inset-0 flex items-center justify-center pb-20">
+          <div className="absolute inset-0 flex items-center justify-center pb-20 z-10">
             <div className="w-48 h-56 sm:w-56 sm:h-64 border-2 border-amber-400 rounded-2xl bg-amber-50/10 animate-pulse flex items-center justify-center">
               <Loader2 className="w-10 h-10 text-amber-400 animate-spin" />
             </div>
           </div>
         )}
 
-        {scanResult?.status === 'known' && scanResult?.bounding_box && (
+        {/* Bounding box on recognized face */}
+        {scanResult?.status === 'known' && scanResult?.bounding_box && cameraActive && (
           <div
-            className="absolute border-2 border-sage-400 rounded-2xl bg-sage-50/10"
+            className="absolute border-2 border-sage-400 rounded-2xl bg-sage-50/10 z-10"
             style={{
               left: `${scanResult.bounding_box.x * 100}%`,
               top: `${scanResult.bounding_box.y * 100}%`,
@@ -253,10 +291,19 @@ export default function VisionPage() {
         <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center space-x-3 z-10">
           <button
             onClick={cameraActive ? stopCamera : startCamera}
-            className="flex items-center space-x-2 bg-white/90 backdrop-blur-sm border border-cream-200 px-4 py-2 rounded-2xl"
+            disabled={cameraLoading}
+            className="flex items-center space-x-2 bg-white/90 backdrop-blur-sm border border-cream-200 px-4 py-2 rounded-2xl disabled:opacity-50"
           >
-            {cameraActive ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
-            <span className="text-sm font-bold">{cameraActive ? 'Stop' : 'Start Camera'}</span>
+            {cameraLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : cameraActive ? (
+              <CameraOff className="w-4 h-4" />
+            ) : (
+              <Camera className="w-4 h-4" />
+            )}
+            <span className="text-sm font-bold">
+              {cameraLoading ? 'Starting...' : cameraActive ? 'Stop' : 'Start Camera'}
+            </span>
           </button>
 
           <button
