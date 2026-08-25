@@ -264,6 +264,277 @@ def get_events(patient_id: str):
     }
 
 
+# ── Vision Endpoints ───────────────────────────────────────────────────
+
+from mira_ml.inference.face_detector import OpenCVFaceDetector
+from mira_ml.inference.face_embedder import ONNXFaceEmbedder
+from mira_ml.inference.object_detector import OpenCVObjectDetector
+from mira_ml.inference.object_embedder import LightweightObjectEmbedder
+from mira_ml.vision.face.recognition import FaceEnrollmentStore, FaceMatchConfig, match_face
+from mira_ml.vision.object.recognition import ObjectEnrollmentStore, ObjectMatchConfig, match_object
+from mira_ml.inference.interfaces import Detection
+
+# Global vision instances (lazy init)
+_face_detector: OpenCVFaceDetector | None = None
+_face_embedder: ONNXFaceEmbedder | None = None
+_object_detector: OpenCVObjectDetector | None = None
+_object_embedder: LightweightObjectEmbedder | None = None
+_face_store = FaceEnrollmentStore()
+_object_store = ObjectEnrollmentStore()
+
+
+def _get_vision():
+    global _face_detector, _face_embedder, _object_detector, _object_embedder
+    if _face_detector is None:
+        _face_detector = OpenCVFaceDetector()
+        _face_detector.load()
+    if _face_embedder is None:
+        _face_embedder = ONNXFaceEmbedder()
+        _face_embedder.load()
+    if _object_detector is None:
+        _object_detector = OpenCVObjectDetector()
+        _object_detector.load()
+    if _object_embedder is None:
+        _object_embedder = LightweightObjectEmbedder()
+    return _face_detector, _face_embedder, _object_detector, _object_embedder
+
+
+class FaceEnrollRequest(BaseModel):
+    patient_id: str
+    identity_id: str
+    label: str
+    embeddings: list[list[float]]
+
+
+class FaceRecognizeRequest(BaseModel):
+    patient_id: str
+    image: list[list[list[int]]]  # H×W×3 RGB
+
+
+class ObjectEnrollRequest(BaseModel):
+    patient_id: str
+    object_id: str
+    label: str
+    embeddings: list[list[float]]
+
+
+class ObjectRecognizeRequest(BaseModel):
+    patient_id: str
+    image: list[list[list[int]]]  # H×W×3 RGB
+
+
+@app.post("/api/v1/vision/face/enroll")
+def enroll_face(req: FaceEnrollRequest):
+    """Enroll a face identity with multiple embedding samples."""
+    try:
+        identity = _face_store.enroll(
+            identity_id=req.identity_id,
+            label=req.label,
+            embeddings=req.embeddings,
+        )
+        return {
+            "status": "enrolled",
+            "identity_id": identity.identity_id,
+            "label": identity.label,
+            "embedding_dim": identity.embedding_dim,
+            "sample_count": identity.sample_count,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/vision/face/recognize")
+def recognize_face(req: FaceRecognizeRequest):
+    """Recognize a face from a camera frame."""
+    fd, fe, _, _ = _get_vision()
+
+    # Detect faces
+    detections = fd.detect(req.image)
+    if not detections:
+        return {
+            "status": "no_face",
+            "patient_id": req.patient_id,
+            "faces_detected": 0,
+        }
+
+    # Process the best face
+    best = max(detections, key=lambda d: d.confidence)
+    h, w = len(req.image), len(req.image[0]) if req.image else 0
+
+    # Crop face from frame
+    x1 = max(0, int(best.bbox.x * w))
+    y1 = max(0, int(best.bbox.y * h))
+    x2 = min(w, int((best.bbox.x + best.bbox.width) * w))
+    y2 = min(h, int((best.bbox.y + best.bbox.height) * h))
+    face_crop = [row[x1:x2] for row in req.image[y1:y2]]
+
+    if not face_crop or not face_crop[0]:
+        return {"status": "crop_failed", "patient_id": req.patient_id}
+
+    # Embed
+    embed_result = fe.embed(face_crop)
+
+    # Match
+    result = match_face(
+        query_embedding=embed_result.embedding,
+        store=_face_store,
+        patient_id=req.patient_id,
+        bounding_box=best.bbox,
+    )
+
+    return {
+        "status": result.status.value,
+        "patient_id": result.patient_id,
+        "identity_id": result.identity_id,
+        "identity_label": result.identity_label,
+        "confidence": result.confidence,
+        "bounding_box": {
+            "x": result.bounding_box.x,
+            "y": result.bounding_box.y,
+            "width": result.bounding_box.width,
+            "height": result.bounding_box.height,
+        } if result.bounding_box else None,
+        "inference_time_ms": result.inference_time_ms,
+        "faces_detected": len(detections),
+        "model_status": {
+            "face_detector": fd.is_loaded(),
+            "face_embedder": fe.is_loaded(),
+        },
+    }
+
+
+@app.get("/api/v1/vision/face/enrolled")
+def list_enrolled_faces():
+    """List all enrolled face identities."""
+    identities = []
+    for identity_id in _face_store.list_identities():
+        label = _face_store.get_label(identity_id)
+        identities.append({"identity_id": identity_id, "label": label})
+    return {"count": _face_store.count, "identities": identities}
+
+
+@app.delete("/api/v1/vision/face/{identity_id}")
+def remove_face(identity_id: str):
+    """Remove an enrolled face identity."""
+    removed = _face_store.remove(identity_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Identity not found")
+    return {"status": "removed", "identity_id": identity_id}
+
+
+@app.post("/api/v1/vision/object/enroll")
+def enroll_object(req: ObjectEnrollRequest):
+    """Enroll a personal object with multiple embedding samples."""
+    try:
+        obj = _object_store.enroll(
+            object_id=req.object_id,
+            label=req.label,
+            embeddings=req.embeddings,
+        )
+        return {
+            "status": "enrolled",
+            "object_id": obj.object_id,
+            "label": obj.label,
+            "embedding_dim": obj.embedding_dim,
+            "sample_count": obj.sample_count,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/vision/object/recognize")
+def recognize_object(req: ObjectRecognizeRequest):
+    """Detect and recognize objects in a camera frame."""
+    _, _, od, oe = _get_vision()
+
+    # Detect objects
+    detections = od.detect(req.image)
+    if not detections:
+        return {
+            "status": "no_objects",
+            "patient_id": req.patient_id,
+            "objects_detected": 0,
+        }
+
+    # Process each detection
+    h, w = len(req.image), len(req.image[0]) if req.image else 0
+    results = []
+
+    for det in detections[:5]:
+        x1 = max(0, int(det.bbox.x * w))
+        y1 = max(0, int(det.bbox.y * h))
+        x2 = min(w, int((det.bbox.x + det.bbox.width) * w))
+        y2 = min(h, int((det.bbox.y + det.bbox.height) * h))
+        obj_crop = [row[x1:x2] for row in req.image[y1:y2]]
+
+        if not obj_crop or not obj_crop[0]:
+            continue
+
+        embed_result = oe.embed(obj_crop)
+        match_result = match_object(
+            query_embedding=embed_result.embedding,
+            store=_object_store,
+            patient_id=req.patient_id,
+            bounding_box=det.bbox,
+        )
+
+        results.append({
+            "status": match_result.status.value,
+            "object_id": match_result.object_id,
+            "object_label": match_result.object_label,
+            "detected_class": det.class_label,
+            "confidence": match_result.confidence,
+            "detection_confidence": round(det.confidence, 4),
+            "bounding_box": {
+                "x": det.bbox.x, "y": det.bbox.y,
+                "width": det.bbox.width, "height": det.bbox.height,
+            },
+        })
+
+    return {
+        "patient_id": req.patient_id,
+        "objects_detected": len(detections),
+        "results": results,
+        "model_status": {
+            "object_detector": od.is_loaded(),
+            "object_embedder": oe.is_loaded(),
+        },
+    }
+
+
+@app.get("/api/v1/vision/object/enrolled")
+def list_enrolled_objects():
+    """List all enrolled objects."""
+    objects = []
+    for obj_id in _object_store.list_objects():
+        label = _object_store.get_label(obj_id)
+        objects.append({"object_id": obj_id, "label": label})
+    return {"count": _object_store.count, "objects": objects}
+
+
+@app.delete("/api/v1/vision/object/{object_id}")
+def remove_object(object_id: str):
+    """Remove an enrolled object."""
+    removed = _object_store.remove(object_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Object not found")
+    return {"status": "removed", "object_id": object_id}
+
+
+@app.get("/api/v1/vision/status")
+def vision_status():
+    """Check which vision models are loaded."""
+    fd, fe, od, oe = _get_vision()
+    return {
+        "face_detector": fd.is_loaded(),
+        "face_embedder": fe.is_loaded(),
+        "object_detector": od.is_loaded(),
+        "object_embedder": oe.is_loaded(),
+        "enrolled_faces": _face_store.count,
+        "enrolled_objects": _object_store.count,
+    }
+
+
 # ── Entry Point ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

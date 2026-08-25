@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Volume2, Sparkles, CheckCircle2, Users, MapPin } from 'lucide-react';
+import { ArrowLeft, Volume2, Camera, CameraOff, Sparkles, CheckCircle2, MapPin, Loader2 } from 'lucide-react';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_MIRA_API_URL || 'http://127.0.0.1:8000';
 
 const ENROLLED_PERSONS = [
   {
-    id: '1',
+    id: 'priya',
     name: 'Priya Hazarika',
     relation: 'Daughter',
     coreMemory: 'She studied at Cotton University and works as a teacher in Guwahati. She visits every Sunday with sweets.',
@@ -14,7 +16,7 @@ const ENROLLED_PERSONS = [
     photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=400&auto=format&fit=crop',
   },
   {
-    id: '2',
+    id: 'rohan',
     name: 'Rohan Sangma',
     relation: 'Grandson',
     coreMemory: 'He is studying engineering in Shillong. He loves cricket and calls every evening at 7pm.',
@@ -22,27 +24,152 @@ const ENROLLED_PERSONS = [
     photoUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=400&auto=format&fit=crop',
   },
   {
-    id: '3',
+    id: 'lalrinmawii',
     name: 'Lalrinmawii',
     relation: 'Wife',
-    coreMemory: 'She makes the bestbamboo shoot pickle. They met at the Aizawl cathedral fair in 1978.',
+    coreMemory: 'She makes the best bamboo shoot pickle. They met at the Aizawl cathedral fair in 1978.',
     location: 'Aizawl, Mizoram',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
   },
 ];
 
 export default function VisionPage() {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const person = ENROLLED_PERSONS[selectedIndex];
+  const [scanResult, setScanResult] = useState<any>(null);
+  const [error, setError] = useState('');
+  const [modelStatus, setModelStatus] = useState<any>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const handleNext = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      setSelectedIndex((prev) => (prev + 1) % ENROLLED_PERSONS.length);
+  const person = ENROLLED_PERSONS[selectedIndex];
+  const identifiedPerson = scanResult?.identity_id
+    ? ENROLLED_PERSONS.find(p => p.id === scanResult.identity_id)
+    : null;
+
+  // Check model status on mount
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/v1/vision/status`)
+      .then(r => r.json())
+      .then(setModelStatus)
+      .catch(() => {});
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 },
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setCameraActive(true);
+        setError('');
+      }
+    } catch {
+      setError('Camera access denied. Using demo mode.');
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach(t => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  const captureFrame = useCallback((): number[][][] | null => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth) return null;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Convert to H×W×3 array
+    const frame: number[][][] = [];
+    for (let y = 0; y < canvas.height; y++) {
+      const row: number[][] = [];
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4;
+        row.push([imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]]);
+      }
+      frame.push(row);
+    }
+    return frame;
+  }, []);
+
+  const handleScan = useCallback(async () => {
+    if (!cameraActive) {
+      // Demo mode — use the current person's photo
+      setIsScanning(true);
+      setScanResult(null);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/vision/face/recognize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: 'MIRA-8821',
+            image: [[], []], // Empty — will return no_face
+          }),
+        });
+        const data = await res.json();
+        setScanResult({
+          ...data,
+          status: 'demo',
+          identity_id: person.id,
+          identity_label: person.name,
+          confidence: 0.994,
+        });
+      } catch {
+        setScanResult({
+          status: 'demo',
+          identity_id: person.id,
+          identity_label: person.name,
+          confidence: 0.994,
+        });
+      }
       setIsScanning(false);
-    }, 500);
-  };
+      return;
+    }
+
+    // Real camera scan
+    const frame = captureFrame();
+    if (!frame) {
+      setError('Failed to capture frame');
+      return;
+    }
+
+    setIsScanning(true);
+    setScanResult(null);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/vision/face/recognize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patient_id: 'MIRA-8821', image: frame }),
+      });
+      const data = await res.json();
+      setScanResult(data);
+    } catch {
+      setError('Backend unavailable. Running in offline mode.');
+      setScanResult({
+        status: 'offline',
+        identity_id: person.id,
+        identity_label: person.name,
+        confidence: 0.0,
+      });
+    }
+
+    setIsScanning(false);
+  }, [cameraActive, captureFrame, person]);
 
   const handleSpeak = () => {
     if ('speechSynthesis' in window) {
@@ -55,15 +182,31 @@ export default function VisionPage() {
     }
   };
 
+  const handleNext = () => {
+    setSelectedIndex(prev => (prev + 1) % ENROLLED_PERSONS.length);
+    setScanResult(null);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (videoRef.current?.srcObject) {
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+        tracks.forEach(t => t.stop());
+      }
+    };
+  }, []);
+
   return (
     <div className="space-y-4">
       {/* Camera Viewport */}
       <div className="relative rounded-3xl overflow-hidden bg-charcoal-900 aspect-[3/4] sm:aspect-video">
-        <img
-          src={person.photoUrl}
-          alt={person.name}
-          className="w-full h-full object-cover"
-        />
+        {cameraActive ? (
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+        ) : (
+          <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
+        )}
+        <canvas ref={canvasRef} className="hidden" />
         <div className="absolute inset-0 bg-charcoal-900/20" />
 
         {/* Top Controls */}
@@ -74,48 +217,106 @@ export default function VisionPage() {
           </Link>
           <div className="flex items-center space-x-2 bg-pastel-blue-50/90 backdrop-blur-sm px-4 py-2 rounded-2xl border border-pastel-blue-200">
             <Sparkles className="w-4 h-4 text-pastel-blue-700" />
-            <span className="text-xs font-black text-pastel-blue-700">AI Vision Active</span>
+            <span className="text-xs font-black text-pastel-blue-700">
+              {scanResult?.status === 'known' ? 'Identified!' : 'AI Vision Active'}
+            </span>
           </div>
         </div>
 
         {/* Bounding Box */}
-        <div className="absolute inset-0 flex items-center justify-center pb-20">
-          <div className={`w-48 h-56 sm:w-56 sm:h-64 border-2 rounded-2xl relative transition-colors ${isScanning ? 'border-gentle-pink-400 bg-gentle-pink-50/10' : 'border-pastel-blue-400 bg-pastel-blue-50/10'}`}>
-            {/* Corners */}
-            <div className="absolute -top-0.5 -left-0.5 w-5 h-5 border-t-[5px] border-l-[5px] border-pastel-blue-700 rounded-tl-xl" />
-            <div className="absolute -top-0.5 -right-0.5 w-5 h-5 border-t-[5px] border-r-[5px] border-pastel-blue-700 rounded-tr-xl" />
-            <div className="absolute -bottom-0.5 -left-0.5 w-5 h-5 border-b-[5px] border-l-[5px] border-pastel-blue-700 rounded-bl-xl" />
-            <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 border-b-[5px] border-r-[5px] border-pastel-blue-700 rounded-br-xl" />
-            {/* Confidence Tag */}
-            <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center space-x-1 bg-sage-50 border border-sage-300 px-3 py-1 rounded-full">
-              <CheckCircle2 className="w-4 h-4 text-sage-600" />
-              <span className="text-xs font-black text-sage-700">99.4% Match</span>
+        {isScanning && (
+          <div className="absolute inset-0 flex items-center justify-center pb-20">
+            <div className="w-48 h-56 sm:w-56 sm:h-64 border-2 border-amber-400 rounded-2xl bg-amber-50/10 animate-pulse flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-amber-400 animate-spin" />
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Switch Person */}
-        <button
-          onClick={handleNext}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 bg-sage-50/90 backdrop-blur-sm border border-sage-300 px-4 py-2 rounded-2xl z-10"
-        >
-          <Users className="w-4 h-4 text-charcoal-800" />
-          <span className="text-sm font-bold text-charcoal-800">Scan Next ({selectedIndex + 1}/{ENROLLED_PERSONS.length})</span>
-        </button>
+        {scanResult?.status === 'known' && scanResult?.bounding_box && (
+          <div
+            className="absolute border-2 border-sage-400 rounded-2xl bg-sage-50/10"
+            style={{
+              left: `${scanResult.bounding_box.x * 100}%`,
+              top: `${scanResult.bounding_box.y * 100}%`,
+              width: `${scanResult.bounding_box.width * 100}%`,
+              height: `${scanResult.bounding_box.height * 100}%`,
+            }}
+          >
+            <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center space-x-1 bg-sage-50 border border-sage-300 px-3 py-1 rounded-full">
+              <CheckCircle2 className="w-4 h-4 text-sage-600" />
+              <span className="text-xs font-black text-sage-700">{Math.round((scanResult.confidence || 0) * 100)}% Match</span>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Controls */}
+        <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center space-x-3 z-10">
+          <button
+            onClick={cameraActive ? stopCamera : startCamera}
+            className="flex items-center space-x-2 bg-white/90 backdrop-blur-sm border border-cream-200 px-4 py-2 rounded-2xl"
+          >
+            {cameraActive ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+            <span className="text-sm font-bold">{cameraActive ? 'Stop' : 'Start Camera'}</span>
+          </button>
+
+          <button
+            onClick={handleScan}
+            disabled={isScanning}
+            className="flex items-center space-x-2 bg-sage-500 hover:bg-sage-600 text-white px-4 py-2 rounded-2xl font-bold disabled:opacity-50"
+          >
+            {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span>{isScanning ? 'Scanning...' : 'Scan Face'}</span>
+          </button>
+
+          <button
+            onClick={handleNext}
+            className="flex items-center space-x-2 bg-sage-50/90 backdrop-blur-sm border border-sage-300 px-4 py-2 rounded-2xl"
+          >
+            <span className="text-sm font-bold text-charcoal-800">Next ({selectedIndex + 1}/{ENROLLED_PERSONS.length})</span>
+          </button>
+        </div>
       </div>
+
+      {/* Model Status */}
+      {modelStatus && (
+        <div className="flex items-center justify-center space-x-4 text-xs font-bold text-charcoal-600">
+          <span className={modelStatus.face_detector ? 'text-sage-600' : 'text-gentle-pink-600'}>
+            Detector: {modelStatus.face_detector ? 'Loaded' : 'Fallback'}
+          </span>
+          <span className={modelStatus.face_embedder ? 'text-sage-600' : 'text-gentle-pink-600'}>
+            Embedder: {modelStatus.face_embedder ? 'ONNX' : 'Histogram'}
+          </span>
+          <span>Faces enrolled: {modelStatus.enrolled_faces}</span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-gentle-pink-50 border border-gentle-pink-200 rounded-2xl p-3 text-sm text-gentle-pink-700 font-bold text-center">
+          {error}
+        </div>
+      )}
 
       {/* Identification Bottom Sheet */}
       <div className="bg-cream-50 border border-cream-200 rounded-3xl p-5 shadow-sm">
         <div className="flex items-center space-x-4 mb-4">
           <div className="relative">
             <img src={person.photoUrl} alt={person.name} className="w-16 h-16 rounded-full border-2 border-sage-400 object-cover" />
-            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
-              <CheckCircle2 className="w-5 h-5 text-sage-500" />
-            </div>
+            {scanResult?.status === 'known' && (
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
+                <CheckCircle2 className="w-5 h-5 text-sage-500" />
+              </div>
+            )}
           </div>
           <div>
-            <h2 className="text-2xl font-black text-charcoal-900">{person.name}</h2>
-            <span className="inline-block bg-pastel-blue-50 border border-pastel-blue-200 text-pastel-blue-700 text-sm font-bold px-3 py-0.5 rounded-xl mt-1">{person.relation}</span>
+            <h2 className="text-2xl font-black text-charcoal-900">
+              {scanResult?.status === 'known' && scanResult.identity_label
+                ? scanResult.identity_label
+                : person.name}
+            </h2>
+            <span className="inline-block bg-pastel-blue-50 border border-pastel-blue-200 text-pastel-blue-700 text-sm font-bold px-3 py-0.5 rounded-xl mt-1">
+              {person.relation}
+            </span>
             {person.location && (
               <p className="flex items-center space-x-1 text-xs text-sage-700 font-semibold mt-1">
                 <MapPin className="w-3 h-3" />
@@ -130,6 +331,28 @@ export default function VisionPage() {
           <p className="text-xs font-black text-sage-700 uppercase tracking-wide mb-1">Core Memory</p>
           <p className="text-sm text-charcoal-800 font-semibold">&ldquo;{person.coreMemory}&rdquo;</p>
         </div>
+
+        {/* Scan Result */}
+        {scanResult && (
+          <div className={`rounded-2xl p-3 mb-4 text-sm font-bold ${
+            scanResult.status === 'known'
+              ? 'bg-sage-50 border border-sage-300 text-sage-800'
+              : scanResult.status === 'demo'
+              ? 'bg-pastel-blue-50 border border-pastel-blue-200 text-pastel-blue-800'
+              : 'bg-amber-50 border border-amber-300 text-amber-800'
+          }`}>
+            {scanResult.status === 'known' && `Face identified as ${scanResult.identity_label} (${Math.round((scanResult.confidence || 0) * 100)}% confidence)`}
+            {scanResult.status === 'demo' && `Demo mode — showing ${scanResult.identity_label}`}
+            {scanResult.status === 'unknown' && 'Face not recognized. Try enrolling this person.'}
+            {scanResult.status === 'no_face' && 'No face detected. Point the camera at a person.'}
+            {scanResult.status === 'offline' && 'Running offline — no backend connection.'}
+            {scanResult.inference_time_ms && (
+              <span className="block text-xs opacity-70 mt-1">
+                Inference: {scanResult.inference_time_ms.toFixed(0)}ms | Faces: {scanResult.faces_detected || 0}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex space-x-3">
