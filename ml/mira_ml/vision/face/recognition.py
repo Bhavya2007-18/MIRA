@@ -31,9 +31,6 @@ class FaceMatchConfig:
     # Below this → UNCERTAIN
     uncertain_threshold: float = 0.50
 
-    # Embedding dimensions
-    embedding_dim: int = 128
-
     # Minimum enrollment samples
     min_enrollment_samples: int = 3
 
@@ -159,7 +156,7 @@ def match_face(
     cfg = config or DEFAULT_FACE_CONFIG
     start = time.monotonic()
 
-    if not query_embedding or len(query_embedding) != cfg.embedding_dim:
+    if not query_embedding:
         return FaceRecognitionResult(
             patient_id=patient_id,
             confidence=0.0,
