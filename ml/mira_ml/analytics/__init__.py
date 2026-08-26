@@ -1,7 +1,7 @@
 """AI analytics and caregiver insights pipeline."""
 
 from mira_ml.analytics.engine import AnalyticsEngine
-from mira_ml.analytics.trends import (
+from  mira_ml.analytics.trends import (
     compute_reaction_trend,
     compute_accuracy_trend,
     compute_stability_score,
