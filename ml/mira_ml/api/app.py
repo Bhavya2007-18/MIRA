@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from mira_ml.schemas.events import GameEvent, GameEventBatch, TaskType
 from mira_ml.api.service import get_service
 from mira_ml.api.store import store
+from mira_ml.api.v1.tracking import router as tracking_router
+from mira_ml.api.v1.telehealth import router as telehealth_router
 
 
 # ── Request / Response Models ──────────────────────────────────────────
@@ -105,6 +107,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Feature Routers ────────────────────────────────────────────────────
+app.include_router(tracking_router)
+app.include_router(telehealth_router)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────

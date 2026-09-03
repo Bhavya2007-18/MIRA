@@ -78,3 +78,17 @@ export interface FaceMatchResult {
   speechPromptAs: string;
   isUnknown: boolean;
 }
+
+export interface LocationPing {
+  patient_id: string;
+  lat: number;
+  lng: number;
+  timestamp?: string;
+}
+
+export interface CallStatus {
+  patient_id: string;
+  is_calling: boolean;
+  room_url: string;
+}
+

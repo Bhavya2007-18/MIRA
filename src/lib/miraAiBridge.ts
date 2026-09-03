@@ -10,6 +10,8 @@ import {
   Recommendation,
   CaregiverReport,
   CaregiverAlert,
+  LocationPing,
+  CallStatus,
 } from '../types/ai';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_MIRA_API_URL || 'http://127.0.0.1:8000';
@@ -189,3 +191,47 @@ export async function fetchDifficulty(
 
   return data;
 }
+
+/**
+ * Send real-time GPS location ping for a patient.
+ */
+export async function sendLocationPing(ping: LocationPing): Promise<LocationPing | null> {
+  return await apiFetch<LocationPing>('/api/v1/tracking/location', {
+    method: 'POST',
+    body: JSON.stringify(ping),
+  });
+}
+
+/**
+ * Fetch latest GPS location for a patient.
+ */
+export async function fetchPatientLocation(patientId: string): Promise<LocationPing | null> {
+  return await apiFetch<LocationPing>(`/api/v1/tracking/location/${encodeURIComponent(patientId)}`);
+}
+
+/**
+ * Initiate a telehealth Jitsi video call with a patient.
+ */
+export async function initiateTelehealthCall(patientId: string): Promise<CallStatus | null> {
+  return await apiFetch<CallStatus>('/api/v1/telehealth/call', {
+    method: 'POST',
+    body: JSON.stringify({ patient_id: patientId }),
+  });
+}
+
+/**
+ * Poll current telehealth call status for a patient.
+ */
+export async function fetchCallStatus(patientId: string): Promise<CallStatus | null> {
+  return await apiFetch<CallStatus>(`/api/v1/telehealth/call/${encodeURIComponent(patientId)}`);
+}
+
+/**
+ * End an active telehealth video call.
+ */
+export async function endTelehealthCall(patientId: string): Promise<CallStatus | null> {
+  return await apiFetch<CallStatus>(`/api/v1/telehealth/call/${encodeURIComponent(patientId)}/end`, {
+    method: 'POST',
+  });
+}
+

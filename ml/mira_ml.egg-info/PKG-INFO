@@ -6,6 +6,9 @@ Requires-Python: >=3.10
 Requires-Dist: pydantic<3.0,>=2.0
 Requires-Dist: fastapi>=0.100.0
 Requires-Dist: uvicorn[standard]>=0.23.0
+Requires-Dist: opencv-python-headless>=4.8.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: onnxruntime>=1.16.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"

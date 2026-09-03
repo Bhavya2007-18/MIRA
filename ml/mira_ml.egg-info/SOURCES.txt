@@ -22,9 +22,17 @@ mira_ml/api/__init__.py
 mira_ml/api/app.py
 mira_ml/api/service.py
 mira_ml/api/store.py
+mira_ml/api/supabase_client.py
+mira_ml/api/v1/__init__.py
+mira_ml/api/v1/telehealth.py
+mira_ml/api/v1/tracking.py
 mira_ml/inference/__init__.py
+mira_ml/inference/face_detector.py
+mira_ml/inference/face_embedder.py
 mira_ml/inference/interfaces.py
 mira_ml/inference/model_manager.py
+mira_ml/inference/object_detector.py
+mira_ml/inference/object_embedder.py
 mira_ml/inference/onnx_export.py
 mira_ml/inference/pipeline.py
 mira_ml/personalization/__init__.py
@@ -39,6 +47,8 @@ mira_ml/schemas/__init__.py
 mira_ml/schemas/cognitive.py
 mira_ml/schemas/events.py
 mira_ml/schemas/recommendations.py
+mira_ml/schemas/telehealth.py
+mira_ml/schemas/tracking.py
 mira_ml/schemas/vision.py
 mira_ml/scoring/__init__.py
 mira_ml/scoring/engine.py
@@ -55,6 +65,7 @@ mira_ml/tests/test_personalization.py
 mira_ml/tests/test_profiling.py
 mira_ml/tests/test_recommendation.py
 mira_ml/tests/test_scoring.py
+mira_ml/tests/test_tracking_telehealth.py
 mira_ml/tests/test_validation.py
 mira_ml/tests/test_vision_face.py
 mira_ml/tests/test_vision_object.py
