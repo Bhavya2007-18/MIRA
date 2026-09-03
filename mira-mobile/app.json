@@ -10,12 +10,24 @@
       "backgroundColor": "#0F172A"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "MIRA needs camera access for Memory Prosthetic face recognition and telehealth video calls.",
+        "NSMicrophoneUsageDescription": "MIRA needs microphone access for voice-first interactions and telehealth video calls.",
+        "NSLocationWhenInUseUsageDescription": "MIRA tracks patient location to assist caretakers and prevent wandering."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

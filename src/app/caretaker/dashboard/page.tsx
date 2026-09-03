@@ -1,6 +1,25 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { VideoCall } from '../../../components/VideoCall';
+
+// Dynamically import Leaflet map to avoid Next.js SSR document is not defined errors
+const PatientMap = dynamic(() => import('../../../components/PatientMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-white border border-cream-200 rounded-3xl p-6 sm:p-7 shadow-sm space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="h-6 w-48 bg-cream-200 rounded-lg animate-pulse" />
+        <div className="h-6 w-24 bg-cream-200 rounded-full animate-pulse" />
+      </div>
+      <div className="w-full h-[360px] sm:h-[400px] rounded-2xl bg-cream-100 flex flex-col items-center justify-center text-charcoal-500 font-semibold animate-pulse space-y-2">
+        <div className="w-8 h-8 rounded-full border-2 border-sage-500 border-t-transparent animate-spin" />
+        <span className="text-xs font-bold text-charcoal-600">Initializing Live OpenStreetMap...</span>
+      </div>
+    </div>
+  ),
+});
 import {
   Brain,
   Activity,
@@ -145,6 +164,19 @@ export default function DashboardPage() {
 
       {/* Cognitive Profile Domain Breakdown */}
       {cognitiveProfile && <CognitiveDomainCard profile={cognitiveProfile} />}
+
+      {/* Live Patient Tracking & Telehealth Intervention Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Real-time OpenStreetMap with GPS Marker & Geofence (7 Cols) */}
+        <div className="lg:col-span-7">
+          <PatientMap patientId={patient.patientId} patientName={patient.patientName} />
+        </div>
+
+        {/* Embedded Jitsi Meet Video Call Signaling (5 Cols) */}
+        <div className="lg:col-span-5">
+          <VideoCall patientId={patient.patientId} patientName={patient.patientName} />
+        </div>
+      </div>
 
       {/* Interactive Charts Section (Reaction Trend & Accuracy Breakdown) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
